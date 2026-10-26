@@ -1,0 +1,13 @@
+{
+  "name": "NL25 Preflop Table",
+  "short_name": "Table",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#101517",
+  "theme_color": "#101517",
+  "icons": [
+    { "src": "icon-180.png", "sizes": "180x180", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

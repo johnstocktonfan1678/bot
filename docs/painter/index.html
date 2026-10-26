@@ -1,0 +1,555 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style>
+<title>NL25 Chart Painter</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&display=swap">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Painter">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#101517">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+</head><body>
+<style>
+/* Layout: chart picker list → painting screen with brushes beside (desktop) or above (phone) a full-width 13x13 grid. */
+:root {
+  --room: #101517; --room-2: #161d20; --surface: #1b2326; --line: #2a3438; --ink: #eef1ec; --muted: #94a19d;
+  --brass: #d3ac5e; --brass-ink: #1a1408;
+  --good: #4cc282; --bad: #ef6b5b;
+  --a-fold: #6f6a60; --a-call: #3a74c4; --a-limp: #3f9483; --a-raise: #e0782f; --a-allin: #8a3427;
+  --a-out: #1f272a; --a-blank: #263034; --a-fold-fg: #f3f1ea;
+  --ui: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --cond: "Barlow Condensed", "Arial Narrow", -apple-system, sans-serif;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0; background: var(--room); color: var(--ink); font: 15px/1.4 var(--ui);
+  background-image: radial-gradient(ellipse at 50% 0%, #1a2427 0%, var(--room) 60%);
+  -webkit-tap-highlight-color: transparent; -webkit-text-size-adjust: 100%;
+}
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--room); }
+[hidden] { display: none !important; }
+button { font: inherit; color: inherit; cursor: pointer; }
+button:focus-visible { outline: 3px solid var(--brass); outline-offset: 2px; }
+.num { font-family: var(--cond); font-variant-numeric: tabular-nums; }
+.wrap {
+  max-width: 920px; margin: 0 auto; min-height: 100%;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 12px 24px;
+  display: flex; flex-direction: column; gap: 16px;
+}
+.narrow { max-width: 560px; }
+.eyebrow { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+h1 { font-family: var(--cond); font-size: 34px; line-height: 1; margin: 0; font-weight: 700; letter-spacing: .01em; text-wrap: balance; }
+h2 { font-size: 15px; margin: 0; font-weight: 650; text-wrap: balance; }
+.sub { color: var(--muted); font-size: 14px; margin: 0; }
+
+/* ---------- picker ---------- */
+.head { display: flex; flex-direction: column; gap: 6px; padding-top: 8px; }
+.seg { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; background: var(--room-2); border: 1px solid var(--line); border-radius: 12px; padding: 3px; gap: 3px; }
+.seg button { border: 0; background: transparent; border-radius: 9px; padding: 9px 4px; font-size: 14px; font-weight: 600; color: var(--muted); }
+.seg button[aria-pressed="true"] { background: var(--brass); color: var(--brass-ink); }
+.seg-note { font-size: 13px; color: var(--muted); margin: -8px 2px 0; }
+.group { display: flex; flex-direction: column; gap: 8px; }
+.group-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 0 2px; }
+.linkbtn { border: 0; background: none; color: var(--brass); font-weight: 600; font-size: 14px; padding: 4px 0; white-space: nowrap; }
+.spots { display: flex; flex-direction: column; background: var(--room-2); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+.spot { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border: 0; background: none; text-align: left; width: 100%; }
+.spot + .spot { border-top: 1px solid var(--line); }
+.check { flex: none; width: 22px; height: 22px; border-radius: 7px; border: 2px solid var(--line); display: grid; place-items: center; }
+.spot[aria-pressed="true"] .check { background: var(--brass); border-color: var(--brass); }
+.spot[aria-pressed="true"] .check::after { content: ""; width: 10px; height: 6px; border: solid var(--brass-ink); border-width: 0 0 2.5px 2.5px; transform: translateY(-1px) rotate(-45deg); }
+.spot-name { flex: 1; min-width: 0; font-size: 15px; }
+.spot-stat { font-family: var(--cond); font-size: 16px; color: var(--muted); white-space: nowrap; }
+.spot-stat b { color: var(--ink); font-weight: 600; }
+.footer-bar {
+  position: sticky; bottom: 0; margin: 0 calc(-1 * max(16px, env(safe-area-inset-left, 0px))) -24px;
+  padding: 12px max(16px, env(safe-area-inset-right, 0px)) calc(16px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
+  background: linear-gradient(to bottom, transparent, var(--room) 30%); display: flex; flex-direction: column; gap: 10px;
+}
+.primary { border: 0; border-radius: 14px; background: var(--brass); color: var(--brass-ink); font-weight: 700; font-size: 17px; padding: 14px; width: 100%; }
+.primary:disabled { opacity: .45; cursor: default; }
+.ghost { border: 1px solid var(--line); border-radius: 14px; background: var(--room-2); color: var(--ink); font-weight: 600; font-size: 16px; padding: 13px; width: 100%; }
+.danger { border: 0; background: none; color: var(--bad); font-weight: 600; font-size: 13px; padding: 4px 0; }
+.small-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: 13px; color: var(--muted); }
+
+/* ---------- paint ---------- */
+.topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.back { border: 0; background: none; color: var(--brass); font-weight: 600; padding: 6px 0; font-size: 16px; }
+.progress { font-family: var(--cond); font-size: 16px; color: var(--muted); text-align: right; }
+.progress b { color: var(--ink); font-weight: 600; }
+.task { display: flex; flex-direction: column; gap: 4px; }
+.task h1 { font-size: 30px; }
+.task .sub b { color: var(--ink); font-weight: 600; }
+.board { display: grid; grid-template-columns: 1fr; gap: 14px; align-items: start; }
+@media (min-width: 760px) { .board { grid-template-columns: 200px 1fr; gap: 22px; } }
+.tools { display: flex; flex-direction: column; gap: 10px; }
+.brushes { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; }
+@media (min-width: 760px) { .brushes { grid-template-columns: 1fr; } }
+.brush {
+  display: flex; align-items: center; gap: 10px; border: 2px solid var(--line); background: var(--surface);
+  border-radius: 12px; padding: 9px 11px; text-align: left; font-weight: 600; font-size: 15px; min-width: 0;
+}
+.brush .sw { flex: none; width: 22px; height: 22px; border-radius: 6px; background: var(--c); box-shadow: inset 0 -2px 0 rgba(0,0,0,.25); }
+.brush .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.brush .key { margin-left: auto; font-family: var(--cond); font-size: 13px; color: var(--muted); }
+.brush[aria-pressed="true"] { border-color: var(--brass); background: var(--room-2); box-shadow: 0 0 0 3px rgba(211,172,94,.25); }
+.split-tog .sw { background: linear-gradient(90deg, var(--a-raise) 50%, var(--a-fold) 50%); }
+.toolrow { display: flex; gap: 8px; flex-wrap: wrap; }
+.tool { flex: 1; border: 1px solid var(--line); background: var(--room-2); border-radius: 10px; padding: 8px 10px; font-size: 13px; font-weight: 600; color: var(--muted); white-space: nowrap; }
+.tool:disabled { opacity: .4; cursor: default; }
+.hint { font-size: 12.5px; color: var(--muted); margin: 0; }
+
+.gridwrap { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.grid {
+  display: grid; grid-template-columns: repeat(13, 1fr); gap: 2px; width: 100%; max-width: 640px; aspect-ratio: 1;
+  touch-action: none; user-select: none; -webkit-user-select: none; align-self: center;
+}
+.cell {
+  position: relative; display: grid; place-items: center; border-radius: 3px; overflow: hidden;
+  font-family: var(--cond); font-weight: 600; font-size: clamp(8px, 2.4vw, 14px); color: #fff; background: var(--c, var(--a-blank));
+  cursor: crosshair;
+}
+.cell.blank { color: var(--muted); }
+.cell.fold { color: var(--a-fold-fg); }
+.cell.out { background: repeating-linear-gradient(45deg, var(--a-out) 0 4px, var(--room) 4px 7px); color: rgba(148,161,157,.45); cursor: default; }
+.cell.split { background: linear-gradient(90deg, var(--c) 50%, var(--c2) 50%); }
+.cell.wrong { outline: 2.5px solid var(--bad); outline-offset: -2.5px; z-index: 1; }
+.cell.wrong::after { content: ""; position: absolute; right: 0; bottom: 0; width: 38%; height: 38%; background: var(--u, var(--a-blank)); border-top-left-radius: 3px; box-shadow: -1px -1px 0 var(--bad); }
+.cell.wrong.usplit::after { background: linear-gradient(90deg, var(--u) 50%, var(--u2) 50%); }
+.grid.done .cell { cursor: default; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 13px; color: var(--muted); }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; background: var(--c); margin-right: 5px; vertical-align: -1px; }
+.submit-row { display: flex; flex-direction: column; gap: 8px; }
+.warn { font-size: 14px; color: var(--brass); margin: 0; }
+
+.result { display: flex; flex-direction: column; gap: 14px; background: var(--room-2); border: 1px solid var(--line); border-radius: 16px; padding: 16px; }
+.score-line { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.score-line .pct { font-family: var(--cond); font-size: 52px; font-weight: 700; line-height: .9; }
+.score-line .pct.good { color: var(--good); } .score-line .pct.mid { color: var(--brass); } .score-line .pct.low { color: var(--bad); }
+.score-line .of { color: var(--muted); font-size: 14px; }
+.misses { display: flex; flex-wrap: wrap; gap: 6px; }
+.miss { font-size: 13px; padding: 4px 8px; border-radius: 8px; background: var(--surface); border: 1px solid var(--line); color: var(--muted); }
+.miss b { color: var(--ink); font-family: var(--cond); font-size: 15px; font-weight: 600; margin-right: 3px; }
+details.why summary { font-size: 14px; font-weight: 600; color: var(--brass); cursor: pointer; padding: 2px 0; }
+details.why ul { margin: 8px 0 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; font-size: 14px; color: var(--muted); }
+.btnrow { display: grid; grid-template-columns: 1fr 2fr; gap: 10px; }
+
+.summary-list { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; background: var(--room-2); }
+.summary-list .row { display: flex; justify-content: space-between; gap: 12px; padding: 11px 14px; font-size: 15px; }
+.summary-list .row + .row { border-top: 1px solid var(--line); }
+.summary-list .row span:last-child { font-family: var(--cond); font-size: 17px; font-weight: 600; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+
+<section id="setup">
+  <div class="wrap narrow">
+    <div class="head">
+      <span class="eyebrow">NL25 · 100bb · 6-max</span>
+      <h1>Chart Painter</h1>
+      <p class="sub" id="totals">Pick the charts to paint from memory. You get scored cell by cell.</p>
+    </div>
+    <div class="seg" role="group" aria-label="Order">
+      <button data-order="random">Random</button>
+      <button data-order="ordered">In order</button>
+    </div>
+    <p class="seg-note" id="order-note"></p>
+    <div id="groups" class="group" style="gap:20px"></div>
+    <div class="footer-bar">
+      <button class="primary" id="start">Start</button>
+      <div class="small-row"><span id="sel-n"></span><button class="danger" id="reset">Reset scores</button></div>
+    </div>
+  </div>
+</section>
+
+<section id="paint" hidden>
+  <div class="wrap">
+    <div class="topbar">
+      <button class="back" id="back">‹ Charts</button>
+      <div class="progress" id="progress"></div>
+    </div>
+    <div class="task">
+      <span class="eyebrow" id="t-section"></span>
+      <h1 id="t-title"></h1>
+      <p class="sub" id="t-sub"></p>
+    </div>
+    <div class="board">
+      <div class="tools" id="tools">
+        <div class="brushes" id="brushes"></div>
+        <div class="toolrow">
+          <button class="tool" id="undo">Undo</button>
+          <button class="tool" id="fill">Fill blanks</button>
+          <button class="tool" id="clear">Clear</button>
+        </div>
+        <p class="hint" id="hint">Drag across cells to paint. Split: paint a hand once, turn on Split, then paint it with the second action. The ♥ half (♥♦ if suited) gets the more aggressive action.</p>
+      </div>
+      <div class="gridwrap">
+        <div class="grid" id="grid" role="grid" aria-label="Hand chart"></div>
+        <div class="legend" id="legend"></div>
+        <div class="submit-row" id="submit-row">
+          <p class="warn" id="warn" hidden></p>
+          <button class="primary" id="submit">Submit chart</button>
+        </div>
+        <div class="result" id="result" hidden></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="summary" hidden>
+  <div class="wrap narrow">
+    <div class="head"><span class="eyebrow">Round complete</span><h1 id="s-title"></h1><p class="sub" id="s-sub"></p></div>
+    <div class="summary-list" id="s-list"></div>
+    <button class="primary" id="s-again">Paint them again</button>
+    <button class="ghost" id="s-back">Back to charts</button>
+  </div>
+</section>
+
+<script src="../data.js"></script>
+<script>
+"use strict";
+const RANKS = "AKQJT98765432";
+const ORDER = ["fold", "call", "limp", "raise", "allin"];
+const SHORT_SECTION = {
+  "Opening ranges from each seat, UTG through SB.": "Open",
+  "Defending against a single 2.5bb open.": "Vs open",
+  "Responding to a 3-bet after you opened.": "Vs 3-bet",
+  "Cold 4-bet spots.": "Cold 4-bet",
+};
+const $ = id => document.getElementById(id);
+
+// ---------- storage (per device) ----------
+const KEY = "nl25-painter-v1";
+function load() { try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch (e) { return {}; } }
+function save() { try { localStorage.setItem(KEY, JSON.stringify(store)); } catch (e) {} }
+const store = Object.assign({ sel: ["open-utg", "open-hj", "open-co", "open-btn", "open-sb"], order: "random", stats: {} }, load());
+
+// ---------- chart helpers ----------
+function labelAt(i, j) {
+  if (i === j) return RANKS[i] + RANKS[j];
+  return i < j ? RANKS[i] + RANKS[j] + "s" : RANKS[j] + RANKS[i] + "o";
+}
+function cleanLabel(t) { t = t.replace(/\s*\(not in your strategy\)/, ""); return t[0].toUpperCase() + t.slice(1); }
+// A cell's answer as "raise" or "raise/fold", aggressive action first, so splits compare in either order.
+function norm(a, b) {
+  if (!b || a === b) return a;
+  return ORDER.indexOf(a) > ORDER.indexOf(b) ? a + "/" + b : b + "/" + a;
+}
+for (const s of SPOTS) {
+  s.short = SHORT_SECTION[s.section] || s.section;
+  s.brushes = ORDER.filter(a => a !== "allin" && s.labels[a]);
+  for (const h in s.hands) { const x = s.hands[h]; for (const a of [x.a, x.b]) if (a && !s.brushes.includes(a)) s.brushes.push(a); }
+  s.brushes.sort((a, b) => ORDER.indexOf(a) - ORDER.indexOf(b));
+  s.btn = {};
+  for (const a of ORDER) s.btn[a] = s.labels[a] ? cleanLabel(s.labels[a]) : a[0].toUpperCase() + a.slice(1);
+  s.key = {};
+  for (const h in s.hands) s.key[h] = norm(s.hands[h].a, s.hands[h].b);
+}
+const byId = Object.fromEntries(SPOTS.map(s => [s.id, s]));
+store.sel = store.sel.filter(id => byId[id]);
+
+// ---------- picker ----------
+const ORDER_NOTE = {
+  random: "Charts come up in random order from your selection, never the same one twice in a row.",
+  ordered: "Every selected chart once, top to bottom, then a round summary.",
+};
+function renderSetup() {
+  for (const b of document.querySelectorAll("[data-order]")) b.setAttribute("aria-pressed", b.dataset.order === store.order);
+  $("order-note").textContent = ORDER_NOTE[store.order];
+  const groups = $("groups"); groups.innerHTML = "";
+  let tries = 0, sum = 0;
+  for (const sec of [...new Set(SPOTS.map(s => s.section))]) {
+    const list = SPOTS.filter(s => s.section === sec), allOn = list.every(s => store.sel.includes(s.id));
+    const g = document.createElement("div"); g.className = "group";
+    g.innerHTML = `<div class="group-head"><h2>${SHORT_SECTION[sec] || sec}</h2><button class="linkbtn">${allOn ? "Clear" : "Select all"}</button></div><div class="spots"></div>`;
+    g.querySelector(".linkbtn").onclick = () => {
+      store.sel = store.sel.filter(id => !list.some(s => s.id === id));
+      if (!allOn) store.sel.push(...list.map(s => s.id));
+      save(); renderSetup();
+    };
+    for (const s of list) {
+      const st = store.stats[s.id];
+      if (st) { tries += st.n; sum += st.sum; }
+      const b = document.createElement("button");
+      b.className = "spot"; b.setAttribute("aria-pressed", store.sel.includes(s.id));
+      const stat = st ? `last <b>${st.last}%</b> · best ${st.best}%` : `${Object.keys(s.hands).length} hands`;
+      b.innerHTML = `<span class="check"></span><span class="spot-name">${s.title}</span><span class="spot-stat">${stat}</span>`;
+      b.onclick = () => {
+        const k = store.sel.indexOf(s.id);
+        k >= 0 ? store.sel.splice(k, 1) : store.sel.push(s.id);
+        save(); renderSetup();
+      };
+      g.querySelector(".spots").appendChild(b);
+    }
+    groups.appendChild(g);
+  }
+  $("totals").textContent = tries
+    ? `${tries} chart${tries > 1 ? "s" : ""} painted on this device · ${Math.round(sum / tries)}% average.`
+    : "Pick the charts to paint from memory. You get scored cell by cell.";
+  const n = store.sel.length;
+  $("start").disabled = !n;
+  $("start").textContent = n ? `Start · ${n} chart${n > 1 ? "s" : ""}` : "Pick at least one chart";
+  $("sel-n").textContent = n ? `${n} selected` : "";
+}
+for (const b of document.querySelectorAll("[data-order]")) b.onclick = () => { store.order = b.dataset.order; save(); renderSetup(); };
+let resetArmed = null;
+$("reset").onclick = () => {
+  if (!resetArmed) {
+    $("reset").textContent = "Tap again to erase";
+    resetArmed = setTimeout(() => { resetArmed = null; $("reset").textContent = "Reset scores"; }, 3000);
+    return;
+  }
+  clearTimeout(resetArmed); resetArmed = null;
+  store.stats = {}; save(); $("reset").textContent = "Reset scores"; renderSetup();
+};
+
+// ---------- session ----------
+let run, cur;   // run: the queue and results; cur: the chart being painted
+function show(id) { for (const s of ["setup", "paint", "summary"]) $(s).hidden = s !== id; window.scrollTo(0, 0); }
+function startRun() {
+  const ids = SPOTS.map(s => s.id).filter(id => store.sel.includes(id));
+  run = { ids, order: store.order, k: 0, results: [], last: null };
+  show("paint"); nextChart();
+}
+function nextChart() {
+  let id;
+  if (run.order === "ordered") {
+    if (run.k >= run.ids.length) return showSummary();
+    id = run.ids[run.k];
+  } else {
+    const pool = run.ids.length > 1 ? run.ids.filter(x => x !== run.last) : run.ids;
+    id = pool[Math.floor(Math.random() * pool.length)];
+  }
+  run.last = id;
+  openChart(byId[id]);
+}
+function openChart(s) {
+  cur = { s, paint: {}, brush: s.brushes.includes("fold") ? "fold" : s.brushes[0], split: false, undo: [], done: false, armed: false };
+  $("t-section").textContent = s.short;
+  $("t-title").textContent = s.title;
+  const nIn = Object.keys(s.hands).length;
+  $("t-sub").innerHTML = nIn < 169
+    ? `Paint the <b>${nIn}</b> hands in this spot. Striped hands aren't in the range here.`
+    : "Paint all 169 hands.";
+  renderProgress();
+  renderBrushes();
+  buildGrid();
+  $("result").hidden = true; $("submit-row").hidden = false; $("warn").hidden = true;
+  $("submit").textContent = "Submit chart";
+  $("tools").hidden = false;
+  window.scrollTo(0, 0);
+}
+function renderProgress() {
+  const done = run.results.length;
+  const avg = done ? Math.round(run.results.reduce((t, r) => t + r.pct, 0) / done) : null;
+  const where = run.order === "ordered" ? `Chart <b>${Math.min(run.k + 1, run.ids.length)}</b> of ${run.ids.length}` : `Chart <b>${done + 1}</b>`;
+  $("progress").innerHTML = where + (avg != null ? ` · ${avg}% avg` : "");
+}
+
+// ---------- brushes ----------
+function brushName(s, a) { return s.btn[a]; }
+function renderBrushes() {
+  const s = cur.s, box = $("brushes");
+  box.innerHTML = "";
+  s.brushes.forEach((a, k) => {
+    const b = document.createElement("button");
+    b.className = "brush"; b.setAttribute("aria-pressed", cur.brush === a);
+    b.style.setProperty("--c", `var(--a-${a})`);
+    b.innerHTML = `<span class="sw"></span><span class="nm">${brushName(s, a)}</span><span class="key">${k + 1}</span>`;
+    b.onclick = () => { cur.brush = a; renderBrushes(); };
+    box.appendChild(b);
+  });
+  const t = document.createElement("button");
+  t.className = "brush split-tog"; t.setAttribute("aria-pressed", cur.split);
+  t.innerHTML = `<span class="sw"></span><span class="nm">Split ${cur.split ? "on" : "off"}</span><span class="key">S</span>`;
+  t.onclick = () => { cur.split = !cur.split; renderBrushes(); };
+  box.appendChild(t);
+  $("undo").disabled = !cur.undo.length;
+}
+
+// ---------- grid ----------
+let cells = {};
+function buildGrid() {
+  const g = $("grid"); g.innerHTML = ""; g.classList.remove("done"); cells = {};
+  for (let i = 0; i < 13; i++) for (let j = 0; j < 13; j++) {
+    const l = labelAt(i, j), d = document.createElement("div");
+    d.className = "cell"; d.dataset.h = l; d.textContent = l; d.setAttribute("role", "gridcell");
+    cells[l] = d;
+    g.appendChild(d);
+  }
+  for (const l in cells) drawCell(l);
+  renderLegend(false);
+}
+function styleFor(key) {
+  if (!key) return { cls: "blank", st: "" };
+  const [a, b] = key.split("/");
+  if (b) return { cls: "split", st: `--c:var(--a-${a});--c2:var(--a-${b})` };
+  return { cls: a === "fold" ? "fold" : "", st: `--c:var(--a-${a})` };
+}
+function drawCell(l) {
+  const d = cells[l], s = cur.s;
+  if (!s.hands[l]) { d.className = "cell out"; d.removeAttribute("style"); return; }
+  const { cls, st } = styleFor(cur.paint[l]);
+  d.className = "cell " + cls; d.setAttribute("style", st);
+}
+function renderLegend(result) {
+  const s = cur.s;
+  const items = s.brushes.map(a => `<span><i style="--c:var(--a-${a})"></i>${brushName(s, a)}</span>`);
+  if (result) items.push(`<span><i style="--c:var(--bad)"></i>Wrong · corner shows what you painted</span>`);
+  $("legend").innerHTML = items.join("");
+}
+
+// Painting: one stroke = pointer down → up; each cell changes at most once per stroke.
+let stroke = null;
+function paintCell(l) {
+  if (!cur || cur.done || !cur.s.hands[l] || stroke.seen.has(l)) return;
+  stroke.seen.add(l);
+  const was = cur.paint[l], br = cur.brush;
+  let next = br;
+  if (cur.split && was && !was.includes("/") && was !== br) next = norm(was, br);
+  if (next === was) return;
+  if (!stroke.saved) { cur.undo.push({ ...cur.paint }); if (cur.undo.length > 60) cur.undo.shift(); stroke.saved = true; }
+  cur.paint[l] = next;
+  drawCell(l);
+  cur.armed = false; $("warn").hidden = true;
+}
+function cellAt(e) {
+  const el = document.elementFromPoint(e.clientX, e.clientY);
+  return el && el.classList && el.classList.contains("cell") ? el.dataset.h : null;
+}
+$("grid").addEventListener("pointerdown", e => {
+  if (!cur || cur.done) return;
+  e.preventDefault();
+  stroke = { seen: new Set(), saved: false };
+  try { $("grid").setPointerCapture(e.pointerId); } catch (_) {}
+  const l = cellAt(e); if (l) paintCell(l);
+});
+$("grid").addEventListener("pointermove", e => { if (!stroke) return; const l = cellAt(e); if (l) paintCell(l); });
+const endStroke = () => { if (stroke) { stroke = null; $("undo").disabled = !cur.undo.length; } };
+$("grid").addEventListener("pointerup", endStroke);
+$("grid").addEventListener("pointercancel", endStroke);
+
+$("undo").onclick = () => {
+  if (!cur.undo.length || cur.done) return;
+  cur.paint = cur.undo.pop();
+  for (const l in cells) drawCell(l);
+  $("undo").disabled = !cur.undo.length;
+};
+$("fill").onclick = () => {
+  if (cur.done) return;
+  const blanks = Object.keys(cur.s.hands).filter(h => !cur.paint[h]);
+  if (!blanks.length) return;
+  cur.undo.push({ ...cur.paint });
+  for (const h of blanks) { cur.paint[h] = cur.brush; drawCell(h); }
+  $("undo").disabled = false; $("warn").hidden = true; cur.armed = false;
+};
+$("clear").onclick = () => {
+  if (cur.done || !Object.keys(cur.paint).length) return;
+  cur.undo.push({ ...cur.paint });
+  cur.paint = {};
+  for (const l in cells) drawCell(l);
+  $("undo").disabled = false;
+};
+
+// ---------- grading ----------
+$("submit").onclick = submit;
+function submit() {
+  if (cur.done) return;
+  const s = cur.s, hands = Object.keys(s.hands);
+  const blanks = hands.filter(h => !cur.paint[h]).length;
+  if (blanks && !cur.armed) {
+    cur.armed = true;
+    $("warn").textContent = `${blanks} hand${blanks > 1 ? "s are" : " is"} still blank and will count as wrong. Submit again to grade anyway.`;
+    $("warn").hidden = false;
+    $("submit").textContent = "Submit anyway";
+    return;
+  }
+  cur.done = true;
+  const wrong = hands.filter(h => cur.paint[h] !== s.key[h]);
+  const right = hands.length - wrong.length, pct = Math.round(100 * right / hands.length);
+  const st = store.stats[s.id] || (store.stats[s.id] = { n: 0, sum: 0, best: 0, last: 0 });
+  st.n++; st.sum += pct; st.last = pct; st.best = Math.max(st.best, pct);
+  save();
+  run.results.push({ id: s.id, pct });
+
+  // Show the real chart, with wrong cells outlined and your paint in the corner.
+  $("grid").classList.add("done");
+  for (const h of hands) {
+    const d = cells[h], { cls, st: sty } = styleFor(s.key[h]);
+    let style = sty, extra = "";
+    if (wrong.includes(h)) {
+      extra = " wrong";
+      const u = cur.paint[h];
+      if (u) {
+        const [a, b] = u.split("/");
+        style += `;--u:var(--a-${a})` + (b ? `;--u2:var(--a-${b})` : "");
+        if (b) extra += " usplit";
+      }
+    }
+    d.className = "cell " + cls + extra; d.setAttribute("style", style);
+  }
+  renderLegend(true);
+  $("tools").hidden = window.matchMedia("(max-width: 759px)").matches;
+  $("submit-row").hidden = true;
+
+  const name = k => k ? k.split("/").map(a => brushName(s, a).toLowerCase()).join(" / ") : "blank";
+  const tone = pct >= 95 ? "good" : pct >= 80 ? "mid" : "low";
+  const missHTML = wrong.slice(0, 40).map(h => `<span class="miss"><b>${h}</b> you ${name(cur.paint[h])}, chart ${name(s.key[h])}</span>`).join("")
+    + (wrong.length > 40 ? `<span class="miss">+${wrong.length - 40} more</span>` : "");
+  const last = run.order === "ordered" && run.k + 1 >= run.ids.length;
+  const r = $("result");
+  r.innerHTML = `<div class="score-line"><span class="pct ${tone}">${pct}%</span><span class="of">${right} of ${hands.length} hands right${wrong.length ? ` · ${wrong.length} wrong` : " · perfect"}${st.n > 1 ? ` · best ${st.best}%` : ""}</span></div>
+    ${wrong.length ? `<div class="misses">${missHTML}</div>` : ""}
+    ${s.why && s.why.length ? `<details class="why"><summary>Why this chart looks like this</summary><ul>${s.why.map(w => `<li>${w}</li>`).join("")}</ul></details>` : ""}
+    <div class="btnrow"><button class="ghost" id="retry">Try again</button><button class="primary" id="gotit">${last ? "Got it · finish round" : "Got it · next chart"}</button></div>`;
+  r.hidden = false;
+  $("retry").onclick = () => openChart(s);
+  $("gotit").onclick = () => { if (run.order === "ordered") run.k++; nextChart(); };
+  renderProgress();
+  r.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "nearest" });
+  $("gotit").focus({ preventScroll: true });
+}
+
+// ---------- round summary (in-order mode) ----------
+function showSummary() {
+  // Keep only the last attempt per chart (retries replace earlier scores).
+  const best = {};
+  for (const r of run.results) best[r.id] = r.pct;
+  const ids = run.ids.filter(id => id in best);
+  const avg = ids.length ? Math.round(ids.reduce((t, id) => t + best[id], 0) / ids.length) : 0;
+  $("s-title").textContent = `${avg}% across ${ids.length} chart${ids.length > 1 ? "s" : ""}`;
+  $("s-sub").textContent = "Your final attempt on each chart this round.";
+  $("s-list").innerHTML = ids.map(id => `<div class="row"><span>${byId[id].title}</span><span style="color:var(--${best[id] >= 95 ? "good" : best[id] >= 80 ? "brass" : "bad"})">${best[id]}%</span></div>`).join("");
+  show("summary");
+}
+$("s-again").onclick = startRun;
+$("s-back").onclick = () => { show("setup"); renderSetup(); };
+$("start").onclick = startRun;
+$("back").onclick = () => { show("setup"); renderSetup(); };
+
+// ---------- keyboard ----------
+document.addEventListener("keydown", e => {
+  if ($("paint").hidden || e.metaKey || e.ctrlKey || e.altKey) return;
+  const k = e.key.toLowerCase();
+  if (cur.done) {
+    if (k === "enter") { e.preventDefault(); $("gotit").click(); }
+    return;
+  }
+  if (/^[1-9]$/.test(k) && cur.s.brushes[+k - 1]) { cur.brush = cur.s.brushes[+k - 1]; renderBrushes(); }
+  else if (k === "s") { cur.split = !cur.split; renderBrushes(); }
+  else if (k === "z") $("undo").click();
+  else if (k === "enter") { e.preventDefault(); submit(); }
+});
+
+renderSetup();
+
+if ("serviceWorker" in navigator && location.protocol === "https:") {
+  navigator.serviceWorker.register("../sw.js", { scope: "../" }).catch(() => {});
+}
+</script>
+
+</body></html>
